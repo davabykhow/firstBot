@@ -5,13 +5,17 @@ import jakarta.persistence.Id;
 
 import java.sql.Timestamp;
 
-@Entity(name = "usersDataTable")
+@Entity(name = "users")
 public class User {
 
     @Id
     private Long chatId;
 
-    private String userName;
+    private String district;
+
+    private String sim;
+
+    private String contactPhone;
 
     private Timestamp registeredAt;
 
@@ -23,19 +27,35 @@ public class User {
         this.chatId = chatId;
     }
 
-    public String getUserName() {
-        return userName;
-    }
-
-    public void setUserName(String userName) {
-        this.userName = userName;
-    }
-
     public Timestamp getRegisteredAt() {
         return registeredAt;
     }
 
     public void setRegisteredAt(Timestamp registeredAt) {
         this.registeredAt = registeredAt;
+    }
+
+    public String getDistrict() {
+        return district;
+    }
+
+    public void setDistrict(String district) {
+        this.district = district;
+    }
+
+    public String getSim() {
+        return sim;
+    }
+
+    public void setSim(String sim) {
+        this.sim = sim;
+    }
+
+    public String getContactPhone() {
+        return contactPhone;
+    }
+
+    public void setContactPhone(String contactPhone) {
+        this.contactPhone = contactPhone;
     }
 }
