@@ -3,13 +3,11 @@ package io.davabykh.molniabot.model;
 import jakarta.persistence.Entity;
 import jakarta.persistence.Id;
 
-
-@Entity(name = "users")
-public class User {
+@Entity(name = "usersOnRegistration")
+public class UsersOnRegistration {
 
     @Id
     private Long chatId;
-
     private String district;
 
     private String sim;
