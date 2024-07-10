@@ -20,6 +20,12 @@ import org.telegram.telegrambots.meta.api.methods.send.SendPhoto;
 import org.telegram.telegrambots.meta.api.objects.*;
 import org.telegram.telegrambots.meta.api.objects.commands.BotCommand;
 import org.telegram.telegrambots.meta.api.objects.commands.scope.BotCommandScopeDefault;
+import org.telegram.telegrambots.meta.api.objects.replykeyboard.InlineKeyboardMarkup;
+import org.telegram.telegrambots.meta.api.objects.replykeyboard.ReplyKeyboard;
+import org.telegram.telegrambots.meta.api.objects.replykeyboard.ReplyKeyboardMarkup;
+import org.telegram.telegrambots.meta.api.objects.replykeyboard.buttons.InlineKeyboardButton;
+import org.telegram.telegrambots.meta.api.objects.replykeyboard.buttons.KeyboardButton;
+import org.telegram.telegrambots.meta.api.objects.replykeyboard.buttons.KeyboardRow;
 import org.telegram.telegrambots.meta.exceptions.TelegramApiException;
 
 import javax.imageio.ImageIO;
@@ -104,6 +110,13 @@ public class TelegramBot extends TelegramLongPollingBot {
             } else {
                 sendMessage(chatId, NO_SUPPORTED_ATTACHMENT);
             }
+        } else if (update.hasCallbackQuery()) {
+            String callbackData = update.getCallbackQuery().getData();
+            long chatId = update.getCallbackQuery().getMessage().getChatId();
+
+            if(callbackData.equals("/help")){
+                sendMessage(chatId, HELP_TEXT);
+            }
         }
     }
 
@@ -126,21 +139,19 @@ public class TelegramBot extends TelegramLongPollingBot {
     private void textProcessor(String message, long chatId){
         switch (message){
             case "/start":
-                sendMessage(chatId, START_TEXT);
-                sendMessage(chatId, HELP_TEXT);
+                sendMessage(chatId, START_TEXT, getDefaultReplyKeyboardMarkup());
                 break;
             case "/getcard":
+            case "Получить шаблон карточки обьекта":
                 sendCard(chatId, PATH_TO_REGISTRATION_EXAMPLE_CARD, NAME_FOR_REGISTRATION_EXAMPLE_CARD);
-                sendMessage(chatId, ON_SELLING_CARD_TEXT);
-                sendMessage(chatId, LITTLE_HELP_TEXT);
+                sendMessage(chatId, ON_SELLING_CARD_TEXT, getDefaultInlineKeyboardMarkup());
                 break;
             case "/getrequisites":
-                sendMessage(chatId, REQUISITES_TEXT);
-                sendMessage(chatId, LITTLE_HELP_TEXT);
+            case "Получить реквизиты для оплаты":
+                sendMessage(chatId, REQUISITES_TEXT, getDefaultInlineKeyboardMarkup());
                 break;
             case "/adddocument":
-                sendMessage(chatId, ADD_DOCUMENT_TEXT);
-                sendMessage(chatId, LITTLE_HELP_TEXT);
+                sendMessage(chatId, ADD_DOCUMENT_TEXT, getDefaultInlineKeyboardMarkup());
                 break;
             case "/help":
                 sendMessage(chatId, HELP_TEXT);
@@ -182,7 +193,7 @@ public class TelegramBot extends TelegramLongPollingBot {
         }
     }
 
-    //ready
+
     private void sendPhoto(long recipientChatId, String uri, String caption) {
         SendPhoto sendPhoto = new SendPhoto();
         sendPhoto.setPhoto(new InputFile(new File(uri)));
@@ -197,7 +208,6 @@ public class TelegramBot extends TelegramLongPollingBot {
         }
     }
 
-    //ready
     private void sendMessage(long chatId, String textToSend){
         SendMessage message = new SendMessage();
         message.setChatId(chatId);
@@ -211,7 +221,20 @@ public class TelegramBot extends TelegramLongPollingBot {
         }
     }
 
-    //ready
+    private void sendMessage(long chatId, String textToSend, ReplyKeyboard replyKeyboard){
+        SendMessage message = new SendMessage();
+        message.setChatId(chatId);
+        message.setText(textToSend);
+        message.setReplyMarkup(replyKeyboard);
+
+        try{
+            execute(message);
+            log.info("Message has been send to: " + chatId);
+        } catch (TelegramApiException e){
+            log.error("ERROR while sending message:" + e.getMessage());
+        }
+    }
+
     private void sendCard(long chatId, String stringPath, String caption){
         Path path = Paths.get(stringPath);
         File file = path.toFile();
@@ -226,15 +249,6 @@ public class TelegramBot extends TelegramLongPollingBot {
         } catch (TelegramApiException e){
             log.error("ERROR while sending card:" + e.getMessage());
         }
-    }
-
-    //empty
-    private void sendDocument(long chatId, String stringPath, String caption){
-        /*try{
-            log.info("Document has been send to: " + chatId);
-        } catch (TelegramApiException e){
-            log.error("ERROR while sending document:" + e.getMessage());
-        }*/
     }
 
     //развернуть файл без загрузки на сервер (я не умею блять)
@@ -266,7 +280,7 @@ public class TelegramBot extends TelegramLongPollingBot {
         }
     }
 
-    //exceptions or ready
+    //exceptions
     private void registration(long chatId, Message message){
         UsersOnRegistration tempUser = new UsersOnRegistration();
         User userToMainTable = new User();
@@ -315,7 +329,6 @@ public class TelegramBot extends TelegramLongPollingBot {
         }
     }
 
-    //move from here
     private String getInformationAboutUserByChatId (long chatId){
         if(userRepository.existsById(chatId)){
             User user = userRepository.findById(chatId).orElse(new User());
@@ -325,9 +338,43 @@ public class TelegramBot extends TelegramLongPollingBot {
             return null;
         }
     }
-    //ready
+
     private String getCaptionForForwardMessage(String personInfo, String userName){
         return "Прислано от:\n\n" + personInfo + "\n@" + userName;
+    }
+
+    private ReplyKeyboardMarkup getDefaultReplyKeyboardMarkup(){
+        ReplyKeyboardMarkup replyKeyboardMarkup = new ReplyKeyboardMarkup();
+        List<KeyboardRow> keyboardRowList = new ArrayList<>();
+        KeyboardRow kbr = new KeyboardRow();
+        kbr.add("Получить шаблон карточки обьекта");
+        keyboardRowList.add(kbr);
+        KeyboardRow kbr2 = new KeyboardRow();
+        kbr2.add("Получить реквизиты для оплаты");
+        keyboardRowList.add(kbr2);
+        KeyboardRow kbr3 = new KeyboardRow();
+        kbr3.add("Какие-то еще фичи");
+        keyboardRowList.add(kbr3);
+        replyKeyboardMarkup.setKeyboard(keyboardRowList);
+        return replyKeyboardMarkup;
+    }
+
+    private InlineKeyboardMarkup getDefaultInlineKeyboardMarkup() {
+
+        InlineKeyboardMarkup markupInLine = new InlineKeyboardMarkup();
+        List<List<InlineKeyboardButton>> rowsInLine = new ArrayList<>();
+        List<InlineKeyboardButton> rowInLine = new ArrayList<>();
+        InlineKeyboardButton button = new InlineKeyboardButton();
+
+        button.setText("Справка");
+        button.setCallbackData("/help");
+
+        rowInLine.add(button);
+
+        rowsInLine.add(rowInLine);
+
+        markupInLine.setKeyboard(rowsInLine);
+        return markupInLine;
     }
 
 }
