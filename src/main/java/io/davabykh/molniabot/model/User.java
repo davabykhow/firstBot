@@ -10,11 +10,19 @@ public class User {
     @Id
     private Long chatId;
 
-    private String district;
+    private String userName;
 
-    private String sim;
+    private String organization;
 
-    private String contactPhone;
+    private String address;
+
+    private String contractNumber;
+
+    private String SIM;
+
+    private String phoneNumber;
+
+    private boolean onRegistration;
 
     public Long getChatId() {
         return chatId;
@@ -24,27 +32,59 @@ public class User {
         this.chatId = chatId;
     }
 
-    public String getDistrict() {
-        return district;
+    public String getOrganization() {
+        return organization;
     }
 
-    public void setDistrict(String district) {
-        this.district = district;
+    public void setOrganization(String organization) {
+        this.organization = organization;
     }
 
-    public String getSim() {
-        return sim;
+    public String getAddress() {
+        return address;
     }
 
-    public void setSim(String sim) {
-        this.sim = sim;
+    public void setAddress(String address) {
+        this.address = address;
     }
 
-    public String getContactPhone() {
-        return contactPhone;
+    public String getContractNumber() {
+        return contractNumber;
     }
 
-    public void setContactPhone(String contactPhone) {
-        this.contactPhone = contactPhone;
+    public void setContractNumber(String contractNumber) {
+        this.contractNumber = contractNumber;
+    }
+
+    public String getSIM() {
+        return SIM;
+    }
+
+    public void setSIM(String SIM) {
+        this.SIM = SIM;
+    }
+
+    public String getPhoneNumber() {
+        return phoneNumber;
+    }
+
+    public void setPhoneNumber(String phoneNumber) {
+        this.phoneNumber = phoneNumber;
+    }
+
+    public boolean isOnRegistration() {
+        return onRegistration;
+    }
+
+    public void setOnRegistration(boolean onRegistration) {
+        this.onRegistration = onRegistration;
+    }
+
+    public String getUserName() {
+        return userName;
+    }
+
+    public void setUserName(String userName) {
+        this.userName = userName;
     }
 }
