@@ -24,6 +24,16 @@ public class User {
 
     private boolean onRegistration;
 
+    private boolean onDirectMode;
+
+    public boolean isOnDirectMode() {
+        return onDirectMode;
+    }
+
+    public void setOnDirectMode(boolean onDirectMode) {
+        this.onDirectMode = onDirectMode;
+    }
+
     public Long getChatId() {
         return chatId;
     }

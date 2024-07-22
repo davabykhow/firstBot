@@ -11,10 +11,14 @@ import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 import org.telegram.telegrambots.bots.TelegramLongPollingBot;
+import org.telegram.telegrambots.meta.api.methods.GetFile;
+import org.telegram.telegrambots.meta.api.methods.commands.SetMyCommands;
 import org.telegram.telegrambots.meta.api.methods.send.SendDocument;
 import org.telegram.telegrambots.meta.api.methods.send.SendMessage;
 import org.telegram.telegrambots.meta.api.methods.send.SendPhoto;
 import org.telegram.telegrambots.meta.api.objects.*;
+import org.telegram.telegrambots.meta.api.objects.commands.BotCommand;
+import org.telegram.telegrambots.meta.api.objects.commands.scope.BotCommandScopeDefault;
 import org.telegram.telegrambots.meta.api.objects.replykeyboard.InlineKeyboardMarkup;
 import org.telegram.telegrambots.meta.api.objects.replykeyboard.ReplyKeyboard;
 import org.telegram.telegrambots.meta.api.objects.replykeyboard.buttons.InlineKeyboardButton;
@@ -47,9 +51,8 @@ public class TelegramBot extends TelegramLongPollingBot {
     final String PATH_TO_REGISTRATION_EXAMPLE_IMAGE = "./src/main/resources/Documents/Registration.jpg";
     final String PATH_TO_REGISTRATION_EXAMPLE_CARD = "./src/main/resources/Documents/Card.doc";
     final String NAME_FOR_REGISTRATION_EXAMPLE_CARD = "Приложение_№_2_карточка_объекта_к_Договору.doc";
-    final String HELP_TEXT = "Нажмите /getcard для получения образца бля бла\n" +
-            "Нажмите /getrequisites для получения реквизитов бла бла\n" +
-            "Нажмите /adddocument тут видимо какая-то инструкция как прислать документы\n";
+    final String HELP_TEXT_REGISTERED = "Текст вспомогательный для зарегистрированных пользователей";
+    final String HELP_TEXT_NOT_REGISTERED = "Текст вспомогательный для незарегистрированных пользователей";
     final String START_TEXT = "Добрый день, вас приветсвует \nЕще текст\nКонец приветсвенного текста";
     final String ADD_DOCUMENT_TEXT = "Тут что-то с обьяснением как прислать документ";
     final String REQUISITES_TEXT = "Деньги отправьте на карту Давиду";
@@ -57,22 +60,25 @@ public class TelegramBot extends TelegramLongPollingBot {
     final String NO_SUPPORTED_TEXT = "Команда не поддерживается\nНажмите /help для отображения функционала бота";
     final String NO_SUPPORTED_ATTACHMENT = "Вложение не поддерживается\nНажмите /help для отображения функционала бота";
     final String LITTLE_HELP_TEXT = "Нажмите /help для отображения функционала бота";
-    final String MESSAGE_DELIVERED = "Ваше сообщение отправлено в СМС \"Молния\" по г.Минску";
-    final String GO_TO_REGISTRATION_TEXT = "Для общения с специалистом необходимо представиться системе";
+    final String MESSAGE_DELIVERED = "Ваше сообщение отправлено в СМС \"Молния\" по г.Минску, ожидайте ответа";
+    final String GO_TO_REGISTRATION_TEXT = "Укажите некоторую информацию для оператора";
     final String VERIFY_REGISTRATION1 = "Вы ввели:\n\nРайон: ";
     final String VERIFY_REGISTRATION2 = "\nСим-карта: ";
     final String VERIFY_REGISTRATION3 = "\nКонтактный телефон: ";
     final String VERIFY_REGISTRATION4 = "\n\nДля того чтобы исправить данные отправьте их снова.\nДля подтверждения нажмите /confirmregistration";
     final String RESELL_REGISTRATION_DATA = "\nВведите данные в три строки, как в примере.";
-    final String SUCCESSFUL_REGISTRATION_TEXT = "Регистрация прошла успешно.";
+    final String SUCCESSFUL_REGISTRATION_TEXT = "Регистрация прошла успешно. Спасибо!";
     final String SUCCESSFUL_REGISTRATION_TEXT_TO_ADMIN = "Зарегистрирован новый пользователь:\n\n";
     final String CAPTION_UNDER_REGISTRATION_EXAMPLE = "Тест и картинку заменить!!!!!!!!";
+    final String START_DIRECT_MODE_TEXT = "Опишите чем вам помочь, специалист ответит вам в этом чате или свяжется лично.\nТакже вы можете прислать вложения.";
+    final String EXIT_FROM_DIRECT_MODE_TEXT = "Если вам необходимо что-то добавить, воспользуйтесь кнопкой связи с оператором повторно";
+    final String NOT_REGISTERED_SEND_MEDIA = "Для того чтобы отправить вложение или медиафайл специалисту, Вам необходимо указать от имени какой организации Вы пишите";
 
     public  TelegramBot(BotConfig config){
         this.config = config;
         TOKEN = config.getToken();
         ADMIN_ID = Long.parseLong(config.getAdminId());
-        //setMenu();
+        setMenu();
     }
 
     @Override
@@ -91,7 +97,21 @@ public class TelegramBot extends TelegramLongPollingBot {
             Message message = update.getMessage();
             long chatId = message.getChatId();
             if (message.hasText()) {
-                textProcessor(message.getText(), chatId);
+                textProcessor(message, chatId);
+            } else if (message.hasPhoto()) {
+                User user = userRepository.findById(chatId).orElse(new User());
+                if(userRepository.existsById(chatId) && !user.isOnRegistration()){
+                    photoProcessor(message, chatId, ADMIN_ID);
+                } else {
+                    sendMessage(chatId, NOT_REGISTERED_SEND_MEDIA, getNotRegisteredSendMediaInlineKeyboardMarkup());
+                }
+            } else if(message.hasDocument()){
+                User user = userRepository.findById(chatId).orElse(new User());
+                if(userRepository.existsById(chatId) && !user.isOnRegistration()){
+                    documentProcessor(message, chatId, ADMIN_ID);
+                } else {
+                    sendMessage(chatId, NOT_REGISTERED_SEND_MEDIA, getNotRegisteredSendMediaInlineKeyboardMarkup());
+                }
             }
 
             /*if (message.hasText()) {
@@ -112,11 +132,11 @@ public class TelegramBot extends TelegramLongPollingBot {
         }
     }
 
-    /*private void setMenu(){
+    private void setMenu(){
         List<BotCommand> listOfCommands = new ArrayList<>();
-        listOfCommands.add(new BotCommand("/getcard", "Получить шаблон карточки обьекта"));
+        /*listOfCommands.add(new BotCommand("/getcard", "Получить шаблон карточки обьекта"));
         listOfCommands.add(new BotCommand("/getrequisites", "Получить реквизиты для оплаты"));
-        listOfCommands.add(new BotCommand("/adddocument", "Как прислать документ"));
+        listOfCommands.add(new BotCommand("/adddocument", "Как прислать документ"));*/
         listOfCommands.add(new BotCommand("/help", "Справочная информация"));
         try{
             this.execute(new SetMyCommands(listOfCommands, new BotCommandScopeDefault(),null));
@@ -126,7 +146,7 @@ public class TelegramBot extends TelegramLongPollingBot {
         {
             log.error("Error at adding menu to bot: " + e.getMessage());
         }
-    }*/
+    }
 
     private void callBackTextProcessor(Update update){
         String callBackText = update.getCallbackQuery().getData();
@@ -142,16 +162,19 @@ public class TelegramBot extends TelegramLongPollingBot {
                 sendMessage(chatId, REQUISITES_TEXT, getDefaultInlineKeyboardMarkup());
                 break;
             case "/communication":
-                sendMessage(chatId, GO_TO_REGISTRATION_TEXT);
-                if(!userRepository.existsById(chatId)){
+                User user = userRepository.findById(chatId).orElse(new User());
+                if(!userRepository.existsById(chatId) || user.isOnRegistration()){
+                    sendMessage(chatId, GO_TO_REGISTRATION_TEXT);
                     /*может рухнуть*/createNewUserByChatId(chatId, update.getCallbackQuery().getMessage().getChat().getUserName());
                     sendMessage(chatId, "Введите название организации");
                 } else {
-                    sendMessage(chatId, "допустим это мод на общение с админом");
+                    startDirectMode(chatId);
                 }
                 break;
             case "/confirmRegistration":
-                sendMessage(chatId, "Вы в режиме общения с администратором");
+                sendMessage(chatId, SUCCESSFUL_REGISTRATION_TEXT);
+                sendMessage(ADMIN_ID, SUCCESSFUL_REGISTRATION_TEXT_TO_ADMIN + getInformationAboutUserByChatId(chatId));
+                startDirectMode(chatId);
                 break;
             case "/reRegistration":
                 /*может рухнуть*/createNewUserByChatId(chatId, update.getCallbackQuery().getMessage().getChat().getUserName());
@@ -160,12 +183,12 @@ public class TelegramBot extends TelegramLongPollingBot {
         }
     }
 
-    private void textProcessor(String message, long chatId){
-        switch (message){
+    private void textProcessor(Message message, long chatId){
+        switch (message.getText()){
             case "/start":
                 sendMessage(chatId, START_TEXT, getDefaultInlineKeyboardMarkup());
                 break;
-            /*case "/getcard":
+            /* case "/getcard":
             case "Получить шаблон карточки обьекта":
                 sendCard(chatId, PATH_TO_REGISTRATION_EXAMPLE_CARD, NAME_FOR_REGISTRATION_EXAMPLE_CARD);
                 sendMessage(chatId, ON_SELLING_CARD_TEXT, getDefaultInlineKeyboardMarkup());
@@ -176,21 +199,65 @@ public class TelegramBot extends TelegramLongPollingBot {
                 break;
             case "/adddocument":
                 sendMessage(chatId, ADD_DOCUMENT_TEXT, getDefaultInlineKeyboardMarkup());
-                break;
-            case "/help":
-                sendMessage(chatId, HELP_TEXT);
                 break;*/
+            case "/help":
+                if(userRepository.existsById(chatId)){
+                    sendMessage(chatId, HELP_TEXT_REGISTERED);
+                } else {
+                    sendMessage(chatId, HELP_TEXT_NOT_REGISTERED);
+                }
+                break;
             default:
                 if(userRepository.existsById(chatId)){
                     User user = userRepository.findById(chatId).orElse(new User());
                     if(user.isOnRegistration()) {
-                        continueRegistration(chatId, message);
-                        }
+                        continueRegistration(chatId, message.getText());
+                        } else if (user.isOnDirectMode()) {
+                        sendMessageToAdminFromDirectMode(chatId, message);
+                        disableDirectMode(chatId);
+                    }
                 } else {
                     sendMessage(chatId, NO_SUPPORTED_TEXT, getDefaultInlineKeyboardMarkup());
                 }
 
         }
+    }
+
+    private void sendMessageToAdminFromDirectMode(long chatId, Message message){
+        sendMessage(ADMIN_ID, message.getText() + getCaptionForForwardMessage(getInformationAboutUserByChatId(chatId), message.getChat().getUserName()));
+        sendMessage(chatId, MESSAGE_DELIVERED);
+    }
+
+    private void startDirectMode(long chatId){
+        sendMessage(chatId, START_DIRECT_MODE_TEXT, getInlineKeyboardMarkupWithoutCommunicationButton());
+        User user = userRepository.findById(chatId).orElse(new User());
+        if(!user.isOnDirectMode()) {
+            user.setOnDirectMode(true);
+            userRepository.save(user);
+        } else {
+            if(user.getChatId() == null){
+                log.error("NO USER ID TO CHANGE IT TO DIRECT MODE");
+            }
+            if(user.isOnDirectMode()){
+                log.error("CALL startDirectMode TO USER IN DIRECT MODE " + chatId);
+            }
+        }
+    }
+
+    private void disableDirectMode(long chatId){
+        User user = userRepository.findById(chatId).orElse(new User());
+        if(user.isOnDirectMode()) {
+            user.setOnDirectMode(false);
+            userRepository.save(user);
+        } else {
+            if(user.getChatId() == null){
+                log.error("NO USER ID TO CHANGE IT FROM DIRECT MODE");
+            }
+            if(!user.isOnDirectMode()){
+                log.error("CALL disableDirectMode TO USER NOT IN DIRECT MODE " + chatId);
+            }
+        }
+        sendMessage(chatId, EXIT_FROM_DIRECT_MODE_TEXT, getDefaultInlineKeyboardMarkup());
     }
 
     private void createNewUserByChatId(long chatId, String userName){
@@ -212,7 +279,7 @@ public class TelegramBot extends TelegramLongPollingBot {
            } else if (user.getAddress() == null) {
                 user.setAddress(text);
                 userRepository.save(user);
-                sendMessage(chatId, "Введите номер договора без\nВсё, что после " + NOMENCLATURE);
+                sendMessage(chatId, "Введите номер договора без номенклатуры\nВсё, что после " + NOMENCLATURE);
             } else if (user.getContractNumber() == null) {
                 //проверка что нет номенклатуры
                 user.setContractNumber(text);
@@ -258,25 +325,10 @@ public class TelegramBot extends TelegramLongPollingBot {
             sendPhoto.setChatId(recipientChatId);
             sendPhoto.setCaption(getCaptionForForwardMessage(getInformationAboutUserByChatId(senderChatId),message.getChat().getUserName()));
             execute(sendPhoto);
-            sendMessage(senderChatId, MESSAGE_DELIVERED);
+            sendMessage(senderChatId, MESSAGE_DELIVERED, getDefaultInlineKeyboardMarkup());
         }
         catch (Exception e){
             System.out.println(e.getMessage());
-        }
-    }
-
-
-    private void sendPhoto(long recipientChatId, String uri, String caption) {
-        SendPhoto sendPhoto = new SendPhoto();
-        sendPhoto.setPhoto(new InputFile(new File(uri)));
-        sendPhoto.setChatId(recipientChatId);
-        sendPhoto.setCaption(caption);
-
-        try{
-            execute(sendPhoto);
-            log.info("Photo has been send to: " + recipientChatId);
-        } catch (TelegramApiException e){
-            log.error("ERROR while sending photo:" + e.getMessage());
         }
     }
 
@@ -325,8 +377,8 @@ public class TelegramBot extends TelegramLongPollingBot {
 
     //развернуть файл без загрузки на сервер (я не умею блять)
     //разделить на методы и закинуть половину в документсендер
-    /*
-       private void documentProcessor(Message message, long senderChatId, long recipientChatId) {
+
+    private void documentProcessor(Message message, long senderChatId, long recipientChatId) {
 
         if (message.hasDocument()){
 
@@ -345,14 +397,28 @@ public class TelegramBot extends TelegramLongPollingBot {
                 sd.setChatId(recipientChatId);
                 sd.setCaption(getCaptionForForwardMessage(getInformationAboutUserByChatId(senderChatId),message.getChat().getUserName()));
                 execute(sd);
-                sendMessage(senderChatId, MESSAGE_DELIVERED);
+                sendMessage(senderChatId, MESSAGE_DELIVERED, getDefaultInlineKeyboardMarkup());
 
             } catch (TelegramApiException e) {
                 log.error("Error while download and send file: " + e.getMessage());
             }
         }
     }
+/*
 
+    private void sendPhoto(long recipientChatId, String uri, String caption) {
+        SendPhoto sendPhoto = new SendPhoto();
+        sendPhoto.setPhoto(new InputFile(new File(uri)));
+        sendPhoto.setChatId(recipientChatId);
+        sendPhoto.setCaption(caption);
+
+        try{
+            execute(sendPhoto);
+            log.info("Photo has been send to: " + recipientChatId);
+        } catch (TelegramApiException e){
+            log.error("ERROR while sending photo:" + e.getMessage());
+        }
+    }
     //exceptions
     private void registration(long chatId, Message message){
         UsersOnRegistration tempUser = new UsersOnRegistration();
@@ -401,23 +467,8 @@ public class TelegramBot extends TelegramLongPollingBot {
             }
         }
     }
-*/
-    private String getInformationAboutUserByChatId (long chatId){
-       if(userRepository.existsById(chatId)){
-            User user = userRepository.findById(chatId).orElse(new User());
-            return "Организация: " + user.getOrganization() + "\nАдрес обьекта: " + user.getAddress() + "\nНомер договора: " +
-                    NOMENCLATURE + user.getContractNumber() + "\nSIM-Card: "
-                    + user.getSIM() + "\nКонтактный телефон: " + user.getPhoneNumber();
-       } else {
-           return null;
-       }
-    }
 
-    private String getCaptionForForwardMessage(String personInfo, String userName){
-        return "Прислано от:\n\n" + personInfo + "\n@" + userName;
-    }
-
-    /* private ReplyKeyboardMarkup getDefaultReplyKeyboardMarkup(){
+ private ReplyKeyboardMarkup getDefaultReplyKeyboardMarkup(){
         ReplyKeyboardMarkup replyKeyboardMarkup = new ReplyKeyboardMarkup();
         List<KeyboardRow> keyboardRowList = new ArrayList<>();
         KeyboardRow kbr = new KeyboardRow();
@@ -433,6 +484,21 @@ public class TelegramBot extends TelegramLongPollingBot {
         return replyKeyboardMarkup;
     }
 */
+    private String getInformationAboutUserByChatId (long chatId){
+       if(userRepository.existsById(chatId)){
+            User user = userRepository.findById(chatId).orElse(new User());
+            return "Организация: " + user.getOrganization() + "\nАдрес обьекта: " + user.getAddress() + "\nНомер договора: " +
+                    NOMENCLATURE + user.getContractNumber() + "\nSIM-Card: "
+                    + user.getSIM() + "\nКонтактный телефон: " + user.getPhoneNumber();
+       } else {
+           return null;
+       }
+    }
+
+    private String getCaptionForForwardMessage(String personInfo, String userName){
+        return "\nПрислано от:\n\n" + personInfo + "\n@" + userName;
+    }
+
     private InlineKeyboardMarkup getDefaultInlineKeyboardMarkup() {
 
         InlineKeyboardMarkup markupInLine = new InlineKeyboardMarkup();
@@ -469,6 +535,33 @@ public class TelegramBot extends TelegramLongPollingBot {
         return markupInLine;
     }
 
+    private InlineKeyboardMarkup getInlineKeyboardMarkupWithoutCommunicationButton() {
+
+        InlineKeyboardMarkup markupInLine = new InlineKeyboardMarkup();
+        List<List<InlineKeyboardButton>> rowsInLine = new ArrayList<>();
+
+        List<InlineKeyboardButton> rowInLine1 = new ArrayList<>();
+        InlineKeyboardButton button1 = new InlineKeyboardButton();
+
+        button1.setText("Получить шаблон карточки объекта");
+        button1.setCallbackData("/getCard");
+
+        rowInLine1.add(button1);
+        rowsInLine.add(rowInLine1);
+
+        List<InlineKeyboardButton> rowInLine2 = new ArrayList<>();
+        InlineKeyboardButton button2 = new InlineKeyboardButton();
+
+        button2.setText("Получить реквизиты для оплаты");
+        button2.setCallbackData("/getRequisites");
+
+        rowInLine2.add(button2);
+        rowsInLine.add(rowInLine2);
+
+        markupInLine.setKeyboard(rowsInLine);
+        return markupInLine;
+    }
+
     private InlineKeyboardMarkup getAfterRegistrationInlineKeyboardMarkup() {
 
         InlineKeyboardMarkup markupInLine = new InlineKeyboardMarkup();
@@ -491,6 +584,24 @@ public class TelegramBot extends TelegramLongPollingBot {
 
         rowInLine2.add(button2);
         rowsInLine.add(rowInLine2);
+
+        markupInLine.setKeyboard(rowsInLine);
+        return markupInLine;
+    }
+
+    private InlineKeyboardMarkup getNotRegisteredSendMediaInlineKeyboardMarkup() {
+
+        InlineKeyboardMarkup markupInLine = new InlineKeyboardMarkup();
+        List<List<InlineKeyboardButton>> rowsInLine = new ArrayList<>();
+
+        List<InlineKeyboardButton> rowInLine1 = new ArrayList<>();
+        InlineKeyboardButton button1 = new InlineKeyboardButton();
+
+        button1.setText("Представиться");
+        button1.setCallbackData("/communication");
+
+        rowInLine1.add(button1);
+        rowsInLine.add(rowInLine1);
 
         markupInLine.setKeyboard(rowsInLine);
         return markupInLine;
