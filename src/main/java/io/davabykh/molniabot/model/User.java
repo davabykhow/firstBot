@@ -1,5 +1,6 @@
 package io.davabykh.molniabot.model;
 
+import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.Id;
 
@@ -8,23 +9,43 @@ import jakarta.persistence.Id;
 public class User {
 
     @Id
+    @Column(name = "chat_id")
     private Long chatId;
 
+    @Column(name = "user_name")
     private String userName;
 
+    @Column(name = "organization")
     private String organization;
 
+    @Column(name = "address")
     private String address;
 
+    @Column(name = "contract_number")
     private String contractNumber;
 
+    @Column(name = "sim")
     private String SIM;
 
+    @Column(name = "phone_number")
     private String phoneNumber;
 
+    @Column(name = "on_registration")
     private boolean onRegistration;
 
+    @Column(name = "on_direct_mode")
     private boolean onDirectMode;
+
+    @Column(name = "banned")
+    private boolean banned;
+
+    public boolean isBanned() {
+        return banned;
+    }
+
+    public void setBanned(boolean banned) {
+        this.banned = banned;
+    }
 
     public boolean isOnDirectMode() {
         return onDirectMode;

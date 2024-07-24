@@ -1,9 +1,8 @@
 package io.davabykh.molniabot.service;
 
 import io.davabykh.molniabot.config.BotConfig;
-import io.davabykh.molniabot.model.UserRepository;
+import io.davabykh.molniabot.model.*;
 import io.davabykh.molniabot.model.User;
-import io.davabykh.molniabot.model.UsersOnRegistrationRepository;
 import lombok.extern.slf4j.Slf4j;
 import org.json.JSONObject;
 import org.slf4j.Logger;
@@ -44,7 +43,10 @@ public class TelegramBot extends TelegramLongPollingBot {
     @Autowired
     private UsersOnRegistrationRepository usersOnRegistrationRepository;
     final long ADMIN_ID;
-    final String NOMENCLATURE = "47/23-15/254/84512";
+    public static final String NOMENCLATURE = "47/23-15/254/84512";
+    private AdminCondition adminCondition = AdminCondition.NOTHING;
+    @Autowired
+    private UserDAO userDAO;
 
     final BotConfig config;
     final String TOKEN;
@@ -73,6 +75,9 @@ public class TelegramBot extends TelegramLongPollingBot {
     final String START_DIRECT_MODE_TEXT = "Опишите чем вам помочь, специалист ответит вам в этом чате или свяжется лично.\nТакже вы можете прислать вложения.";
     final String EXIT_FROM_DIRECT_MODE_TEXT = "Если вам необходимо что-то добавить, воспользуйтесь кнопкой связи с оператором повторно";
     final String NOT_REGISTERED_SEND_MEDIA = "Для того чтобы отправить вложение или медиафайл специалисту, Вам необходимо указать от имени какой организации Вы пишите";
+    final String USER_IS_BANED = "Внесено в список блокировки следующее имя пользователя @";
+    final String NO_SUCH_MATCHES = "Совпадения не найдены:(";
+    final String IS_BANNED_TEXT = "Доступ к этому чату для вас заблокирован, если это ошибка позвоните по номеру 112";
 
     public  TelegramBot(BotConfig config){
         this.config = config;
@@ -96,7 +101,16 @@ public class TelegramBot extends TelegramLongPollingBot {
         if(update.hasMessage()) {
             Message message = update.getMessage();
             long chatId = message.getChatId();
-            if (message.hasText()) {
+
+            if (userDAO.isUserBanned(chatId)){
+                sendMessage(chatId, IS_BANNED_TEXT);
+                return;
+            }
+
+            if(chatId == ADMIN_ID){
+                adminTextProcessor(message);
+                sendMessage(ADMIN_ID, "admin text", getAdminDefaultInlineKeyboardMarkup());
+            } else if (message.hasText()) {
                 textProcessor(message, chatId);
             } else if (message.hasPhoto()) {
                 User user = userRepository.findById(chatId).orElse(new User());
@@ -128,7 +142,18 @@ public class TelegramBot extends TelegramLongPollingBot {
                 sendMessage(chatId, NO_SUPPORTED_ATTACHMENT);
             }*/
         } else if (update.hasCallbackQuery()) {
-            callBackTextProcessor(update);
+            long chatId = update.getCallbackQuery().getMessage().getChatId();
+
+            if (userDAO.isUserBanned(chatId)){
+                sendMessage(chatId, IS_BANNED_TEXT);
+                return;
+            }
+
+            if(update.getCallbackQuery().getMessage().getChatId() == ADMIN_ID){
+                adminCallBackTextProcessor(update);
+            } else {
+                callBackTextProcessor(update);
+            }
         }
     }
 
@@ -145,6 +170,20 @@ public class TelegramBot extends TelegramLongPollingBot {
         catch (TelegramApiException e)
         {
             log.error("Error at adding menu to bot: " + e.getMessage());
+        }
+    }
+
+    private void adminCallBackTextProcessor(Update update){
+        String callBackText = update.getCallbackQuery().getData();
+        switch (callBackText) {
+            case "/find_by_contract_num":
+                sendMessage(ADMIN_ID, "Введите номер договора без " + NOMENCLATURE);
+                adminCondition = AdminCondition.FIND_USER_BY_CONTRACT_NUMBER;
+                break;
+            case "/ban":
+                sendMessage(ADMIN_ID, "Введите имя пользователя без \\'@\\' для бана");
+                adminCondition = AdminCondition.BAN_USER;
+                break;
         }
     }
 
@@ -220,6 +259,24 @@ public class TelegramBot extends TelegramLongPollingBot {
                     sendMessage(chatId, NO_SUPPORTED_TEXT, getDefaultInlineKeyboardMarkup());
                 }
 
+        }
+    }
+
+    private void adminTextProcessor(Message message){
+        String messageText = message.getText();
+        switch (adminCondition){
+            case BAN_USER:
+                if (banUserByUserName(messageText)) {
+                    sendMessage(ADMIN_ID, USER_IS_BANED + messageText);
+                } else {
+                    sendMessage(ADMIN_ID, NO_SUCH_MATCHES + messageText);
+                }
+                adminCondition = AdminCondition.NOTHING;
+                break;
+            case FIND_USER_BY_CONTRACT_NUMBER:
+                sendMessage(ADMIN_ID, userDAO.getInformationAboutUserByContractNumber(messageText));
+                adminCondition = AdminCondition.NOTHING;
+                break;
         }
     }
 
@@ -499,6 +556,17 @@ public class TelegramBot extends TelegramLongPollingBot {
         return "\nПрислано от:\n\n" + personInfo + "\n@" + userName;
     }
 
+    private boolean banUserByUserName(String userName){
+        User user = userDAO.getUserByUserName(userName);
+        if (user == null){
+            return false;
+        }else{
+            user.setBanned(true);
+            userRepository.save(user);
+            return true;
+        }
+    }
+
     private InlineKeyboardMarkup getDefaultInlineKeyboardMarkup() {
 
         InlineKeyboardMarkup markupInLine = new InlineKeyboardMarkup();
@@ -602,6 +670,33 @@ public class TelegramBot extends TelegramLongPollingBot {
 
         rowInLine1.add(button1);
         rowsInLine.add(rowInLine1);
+
+        markupInLine.setKeyboard(rowsInLine);
+        return markupInLine;
+    }
+
+    private InlineKeyboardMarkup getAdminDefaultInlineKeyboardMarkup() {
+
+        InlineKeyboardMarkup markupInLine = new InlineKeyboardMarkup();
+        List<List<InlineKeyboardButton>> rowsInLine = new ArrayList<>();
+
+        List<InlineKeyboardButton> rowInLine1 = new ArrayList<>();
+        InlineKeyboardButton button1 = new InlineKeyboardButton();
+
+        button1.setText("Забанить пользователя");
+        button1.setCallbackData("/ban");
+
+        rowInLine1.add(button1);
+        rowsInLine.add(rowInLine1);
+
+        List<InlineKeyboardButton> rowInLine2 = new ArrayList<>();
+        InlineKeyboardButton button2 = new InlineKeyboardButton();
+
+        button2.setText("Найти пользователя по номеру договора");
+        button2.setCallbackData("/find_by_contract_num");
+
+        rowInLine2.add(button2);
+        rowsInLine.add(rowInLine2);
 
         markupInLine.setKeyboard(rowsInLine);
         return markupInLine;
