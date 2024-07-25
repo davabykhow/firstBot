@@ -43,7 +43,7 @@ public class TelegramBot extends TelegramLongPollingBot {
     @Autowired
     private UsersOnRegistrationRepository usersOnRegistrationRepository;
     final long ADMIN_ID;
-    public static final String NOMENCLATURE = "47/23-15/254/84512";
+    public static final String NOMENCLATURE = "47/21-29-";
     private AdminCondition adminCondition = AdminCondition.NOTHING;
     @Autowired
     private UserDAO userDAO;
