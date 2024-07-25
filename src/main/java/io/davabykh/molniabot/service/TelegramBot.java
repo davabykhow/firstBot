@@ -78,6 +78,8 @@ public class TelegramBot extends TelegramLongPollingBot {
     final String USER_IS_BANED = "Внесено в список блокировки следующее имя пользователя @";
     final String NO_SUCH_MATCHES = "Совпадения не найдены:(";
     final String IS_BANNED_TEXT = "Доступ к этому чату для вас заблокирован, если это ошибка позвоните по номеру 112";
+    final String USER_IS_UNBANED = "Удалено из списка блокировки следующее имя пользователя @";
+    final String NOT_ENOUGH_ANSWER = "Остались вопросы? Воспользуйтесь функцией связи со специалистом";
 
     public  TelegramBot(BotConfig config){
         this.config = config;
@@ -109,7 +111,10 @@ public class TelegramBot extends TelegramLongPollingBot {
 
             if(chatId == ADMIN_ID){
                 adminTextProcessor(message);
-                sendMessage(ADMIN_ID, "admin text", getAdminDefaultInlineKeyboardMarkup());
+                sendMessage(ADMIN_ID, "Выберите функцию", getAdminDefaultInlineKeyboardMarkup());
+                if(update.getMessage().isReply()){
+                    responseToUsersRequest(message);
+                }
             } else if (message.hasText()) {
                 textProcessor(message, chatId);
             } else if (message.hasPhoto()) {
@@ -184,6 +189,11 @@ public class TelegramBot extends TelegramLongPollingBot {
                 sendMessage(ADMIN_ID, "Введите имя пользователя без \\'@\\' для бана");
                 adminCondition = AdminCondition.BAN_USER;
                 break;
+            case "/unban":
+                sendMessage(ADMIN_ID, "Введите имя пользователя без \\'@\\' для отмены бана");
+                adminCondition = AdminCondition.UNBAN_USER;
+                break;
+
         }
     }
 
@@ -254,6 +264,8 @@ public class TelegramBot extends TelegramLongPollingBot {
                         } else if (user.isOnDirectMode()) {
                         sendMessageToAdminFromDirectMode(chatId, message);
                         disableDirectMode(chatId);
+                    } else {
+                        sendMessage(chatId, NO_SUPPORTED_TEXT, getDefaultInlineKeyboardMarkup());
                     }
                 } else {
                     sendMessage(chatId, NO_SUPPORTED_TEXT, getDefaultInlineKeyboardMarkup());
@@ -275,6 +287,14 @@ public class TelegramBot extends TelegramLongPollingBot {
                 break;
             case FIND_USER_BY_CONTRACT_NUMBER:
                 sendMessage(ADMIN_ID, userDAO.getInformationAboutUserByContractNumber(messageText));
+                adminCondition = AdminCondition.NOTHING;
+                break;
+            case UNBAN_USER:
+                if (unbanUserByUserName(messageText)) {
+                    sendMessage(ADMIN_ID, USER_IS_UNBANED + messageText);
+                } else {
+                    sendMessage(ADMIN_ID, NO_SUCH_MATCHES + messageText);
+                }
                 adminCondition = AdminCondition.NOTHING;
                 break;
         }
@@ -323,6 +343,20 @@ public class TelegramBot extends TelegramLongPollingBot {
         user.setOnRegistration(true);
         user.setUserName(userName);
         userRepository.save(user);
+    }
+
+    private void responseToUsersRequest(Message message){
+        //костыль
+        try{
+            String userName = message.getReplyToMessage().getText().split("@")[message.getReplyToMessage().getText().split("@").length - 1];
+            User user = userDAO.getUserByUserName(userName);
+            sendMessage(user.getChatId(), message.getText());
+            sendMessage(user.getChatId(), NOT_ENOUGH_ANSWER, getDefaultInlineKeyboardMarkup());
+            sendMessage(ADMIN_ID, "Ответ направлен");
+        } catch (Exception e){
+            System.out.println(e.getMessage());
+            sendMessage(ADMIN_ID, "Ошибка при ответе на сообщение");
+        }
     }
 
     //валидаторы
@@ -567,6 +601,17 @@ public class TelegramBot extends TelegramLongPollingBot {
         }
     }
 
+    private boolean unbanUserByUserName(String userName){
+        User user = userDAO.getUserByUserName(userName);
+        if (user == null){
+            return false;
+        }else{
+            user.setBanned(false);
+            userRepository.save(user);
+            return true;
+        }
+    }
+
     private InlineKeyboardMarkup getDefaultInlineKeyboardMarkup() {
 
         InlineKeyboardMarkup markupInLine = new InlineKeyboardMarkup();
@@ -697,6 +742,15 @@ public class TelegramBot extends TelegramLongPollingBot {
 
         rowInLine2.add(button2);
         rowsInLine.add(rowInLine2);
+
+        List<InlineKeyboardButton> rowInLine3 = new ArrayList<>();
+        InlineKeyboardButton button3 = new InlineKeyboardButton();
+
+        button3.setText("Разбанить пользователя");
+        button3.setCallbackData("/unban");
+
+        rowInLine3.add(button3);
+        rowsInLine.add(rowInLine3);
 
         markupInLine.setKeyboard(rowsInLine);
         return markupInLine;
